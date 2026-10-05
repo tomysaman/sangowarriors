@@ -32,6 +32,17 @@ export function makeMaterials(pal) {
     plume: new THREE.MeshStandardMaterial({ color: pal.plume ?? 0xb3121a, roughness: 0.9 }),
     eye: new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.2 }),
     cape: new THREE.MeshPhysicalMaterial({ color: pal.cape ?? 0xf4f1ea, roughness: 0.8, sheen: 0.35, sheenColor: new THREE.Color(0xd8d4cc), sheenRoughness: 0.6, side: THREE.DoubleSide }),
+    // optional per-character pieces; each falls back to the shared material it used to be
+    helmet: pal.helmet != null ? metal(pal.helmet, pal.helmetRough ?? 0.3) : armor,
+    helmetTrim: pal.helmetTrim != null ? metal(pal.helmetTrim, 0.22) : null,
+    tassel: pal.tassel != null ? new THREE.MeshStandardMaterial({ color: pal.tassel, roughness: 0.9 }) : null,
+    scarf: pal.scarf ? silk(pal.scarf, pal.scarfMotif ?? pal.scarf) : null,
+    knot: pal.knot != null ? new THREE.MeshStandardMaterial({ color: pal.knot, roughness: 0.7 }) : null,
+    headband: pal.headband ? silk(pal.headband, pal.headbandMotif ?? pal.headband) : null,
+    gem: new THREE.MeshPhysicalMaterial({ color: pal.gem ?? 0x2a9ad0, roughness: 0.05, clearcoat: 1 }),
+    lips: pal.lips != null ? new THREE.MeshStandardMaterial({ color: pal.lips, roughness: 0.45 }) : null,
+    teeth: new THREE.MeshStandardMaterial({ color: 0xf2ede2, roughness: 0.35 }),
+    flower: new THREE.MeshStandardMaterial({ color: pal.flower ?? 0xf08aa8, roughness: 0.6 }),
   };
 }
 
@@ -150,7 +161,7 @@ export function buildWeapon(type, mats) {
     tassel.position.set(0, 0, headZ - 0.08);
     const strand = new THREE.ConeGeometry(0.01, 0.22, 4); strand.translate(0, -0.11, 0);
     for (let i = 0; i < 16; i++) {
-      const s = add(tassel, strand, mats.plume, [Math.cos(i) * 0.02, 0, Math.sin(i * 1.7) * 0.02], [0, 0, (Math.random() - 0.5) * 0.4], [1, 0.8 + Math.random() * 0.5, 1], false);
+      const s = add(tassel, strand, mats.tassel ?? mats.plume, [Math.cos(i) * 0.02, 0, Math.sin(i * 1.7) * 0.02], [0, 0, (Math.random() - 0.5) * 0.4], [1, 0.8 + Math.random() * 0.5, 1], false);
       s.userData.base = s.rotation.z;
     }
     g.add(tassel); info.tassel.push(tassel);
@@ -227,6 +238,13 @@ export function buildWarrior(def) {
     add(buckle, new THREE.SphereGeometry(0.018, 8, 6), mats.armor, [0, 0.012, 0]);
     // collar
     add(B.chest, new THREE.TorusGeometry(0.08, 0.025, 8, 20), mats.cloth2, [0, 0.29, 0], [Math.PI / 2, 0, 0], [1, 0.85, 1]);
+    if (mats.scarf) {
+      // silk scarf: a cowl over the shoulders, a roll around the neck and a knot with two tails in front
+      add(B.chest, lathe([[0.075, 0.36], [0.11, 0.32], [0.17 * bulk, 0.27], [0.215 * bulk, 0.2], [0.225 * bulk, 0.16]], 22, 0.78), mats.scarf);
+      add(B.chest, new THREE.TorusGeometry(0.088, 0.034, 8, 22), mats.scarf, [0, 0.31, 0], [Math.PI / 2, 0, 0], [1, 0.9, 1]);
+      add(B.chest, new THREE.SphereGeometry(0.034, 10, 8), mats.knot ?? mats.scarf, [0, 0.25, 0.165 * bulk], [0, 0, 0], [1.2, 0.9, 0.8]);
+      for (const sx of [1, -1]) add(B.chest, new THREE.BoxGeometry(0.05, 0.17, 0.014), mats.knot ?? mats.scarf, [sx * 0.025, 0.16, 0.172 * bulk], [-0.12, 0, sx * 0.18]);
+    }
   } else {
     // robe: layered silk with sash
     add(B.spine, new THREE.TorusGeometry(0.16, 0.035, 8, 24), mats.cloth2, [0, 0.03, 0], [Math.PI / 2, 0, 0], [1, 0.75, 1]);
@@ -238,17 +256,29 @@ export function buildWarrior(def) {
   const face = add(B.head, new THREE.SphereGeometry(0.1, 24, 18), mats.skin, [0, 0.05, 0.005], [0, 0, 0], [0.9, 1.12, 1.0]);
   add(B.head, new THREE.SphereGeometry(0.06, 16, 12), mats.skin, [0, -0.015, 0.035], [0, 0, 0], [1.05, 0.9, 1.0]); // jaw
   add(B.head, new THREE.ConeGeometry(0.013, 0.045, 6), mats.skin, [0, 0.04, 0.102], [-0.35, 0, 0], [1, 1, 0.8]); // nose
-  add(B.head, new THREE.BoxGeometry(0.024, 0.004, 0.008), mats.eye, [0, 0.002, 0.093]); // mouth
+  const look = def.face ?? {};
+  if (look.grin) {
+    // wide open grin with teeth
+    add(B.head, new THREE.BoxGeometry(0.046, 0.016, 0.01), mats.eye, [0, 0.0, 0.092]);
+    add(B.head, new THREE.BoxGeometry(0.04, 0.008, 0.011), mats.teeth, [0, 0.004, 0.094]);
+  } else {
+    add(B.head, new THREE.BoxGeometry(0.024, 0.004, 0.008), mats.lips ?? mats.eye, [0, 0.002, 0.093], [0, 0, 0], mats.lips ? [1, 1.8, 1] : [1, 1, 1]); // mouth
+  }
+  // brows: 'thick' (heavy, scowling) or 'fine' (thin, gently arched)
+  const brow = look.brows === 'thick' ? { s: [1.25, 2.0, 1.2], tilt: -0.38 } : look.brows === 'fine' ? { s: [0.95, 0.55, 1], tilt: 0.08 } : { s: [1, 1, 1], tilt: -0.22 };
   for (const sx of [1, -1]) {
     add(B.head, new THREE.SphereGeometry(0.011, 10, 8), mats.eye, [sx * 0.033, 0.062, 0.091], [0, 0, 0], [1.7, 0.9, 0.6]);
-    add(B.head, new THREE.BoxGeometry(0.036, 0.009, 0.012), mats.hair, [sx * 0.035, 0.087, 0.094], [0, 0, sx * -0.22]);
+    add(B.head, new THREE.BoxGeometry(0.036, 0.009, 0.012), mats.hair, [sx * 0.035, 0.087, 0.094], [0, 0, sx * brow.tilt], brow.s);
     add(B.head, new THREE.SphereGeometry(0.018, 8, 8), mats.skin, [sx * 0.09, 0.05, 0.0], [0, 0, 0], [0.5, 1, 0.8]); // ears
   }
   // hair mass
   add(B.head, new THREE.SphereGeometry(0.108, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.6), mats.hair, [0, 0.07, -0.018], [0.55, 0, 0], [0.98, 1.05, 1.06]);
   if (def.beard) {
-    add(B.head, new THREE.SphereGeometry(0.075, 14, 10), mats.hair, [0, -0.02, 0.04], [0.3, 0, 0], [1.25, 1.1, 1.0]);
-    add(B.head, new THREE.ConeGeometry(0.06, 0.16, 10), mats.hair, [0, -0.1, 0.06], [Math.PI + 0.25, 0, 0]);
+    // a grinning face keeps the beard below the mouth
+    if (look.grin) add(B.head, new THREE.SphereGeometry(0.075, 14, 10), mats.hair, [0, -0.072, 0.03], [0.3, 0, 0], [1.25, 0.85, 0.95]);
+    else add(B.head, new THREE.SphereGeometry(0.075, 14, 10), mats.hair, [0, -0.02, 0.04], [0.3, 0, 0], [1.25, 1.1, 1.0]);
+    add(B.head, new THREE.ConeGeometry(0.06, 0.16, 10), mats.hair, [0, look.grin ? -0.13 : -0.1, 0.06], [Math.PI + 0.25, 0, 0]);
+    if (look.grin) for (const sx of [1, -1]) add(B.head, new THREE.CapsuleGeometry(0.009, 0.04, 4, 6), mats.hair, [sx * 0.026, 0.016, 0.097], [0, 0, sx * 1.2]);
   }
   // ponytail / long hair tail
   const tail = new THREE.CatmullRomCurve3([[0, 0.1, -0.09], [0, 0.03, -0.14], [0, -0.12, -0.16], [0, -0.32, -0.14]].map((p) => new THREE.Vector3(...p)));
@@ -256,34 +286,60 @@ export function buildWarrior(def) {
   { const p = tailGeo.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const s = THREE.MathUtils.mapLinear(y, 0.1, -0.32, 1, 0.3); p.setX(i, p.getX(i) * s); } }
   if (def.hairTail !== false) add(B.head, tailGeo, mats.hair);
   if (def.bun) add(B.head, new THREE.SphereGeometry(0.06, 14, 10), mats.hair, [0, 0.16, -0.05]);
+  if (def.flowers) for (const [x, y, z, r] of [[0.06, 0.15, -0.02, 0.018], [0.075, 0.12, 0.0, 0.014], [0.05, 0.18, -0.06, 0.013]]) add(B.head, new THREE.SphereGeometry(r, 8, 6), mats.flower, [x, y, z]);
 
   // helmet
   if (def.helmet) {
     const hg = new THREE.Group(); hg.position.set(0, 0.128, -0.01); hg.scale.setScalar(1.08); B.head.add(hg);
-    add(hg, new THREE.SphereGeometry(0.122, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), mats.armor, [0, 0, 0], [0, 0, 0], [1, 1.05, 1.08]);
-    add(hg, new THREE.TorusGeometry(0.122, 0.012, 8, 30), mats.trim, [0, 0.0, 0], [Math.PI / 2, 0, 0], [1, 1.08, 1]);
+    const hTrim = mats.helmetTrim ?? mats.trim;
+    add(hg, new THREE.SphereGeometry(0.122, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), mats.helmet, [0, 0, 0], [0, 0, 0], [1, 1.05, 1.08]);
+    add(hg, new THREE.TorusGeometry(0.122, 0.012, 8, 30), hTrim, [0, 0.0, 0], [Math.PI / 2, 0, 0], [1, 1.08, 1]);
     // ridges
-    for (let i = 0; i < 8; i++) add(hg, new THREE.TorusGeometry(0.124, 0.004, 4, 20, Math.PI / 2), mats.trim, [0, 0, 0], [0, (i / 8) * Math.PI * 2, Math.PI / 2], [1, 1.05, 1]);
+    if (def.ridges !== false) for (let i = 0; i < 8; i++) add(hg, new THREE.TorusGeometry(0.124, 0.004, 4, 20, Math.PI / 2), hTrim, [0, 0, 0], [0, (i / 8) * Math.PI * 2, Math.PI / 2], [1, 1.05, 1]);
     // brim/visor
-    add(hg, new THREE.CylinderGeometry(0.14, 0.15, 0.012, 28, 1, true, -Math.PI * 0.45, Math.PI * 0.9), mats.trim, [0, -0.005, 0.0], [0.15, 0, 0]);
-    // golden crest: flame-shaped front ornament
-    const cs = new THREE.Shape();
-    cs.moveTo(0, 0); cs.bezierCurveTo(0.09, 0.05, 0.1, 0.14, 0.03, 0.22); cs.bezierCurveTo(0.05, 0.13, 0.02, 0.08, 0, 0.07);
-    cs.bezierCurveTo(-0.02, 0.08, -0.05, 0.13, -0.03, 0.22); cs.bezierCurveTo(-0.1, 0.14, -0.09, 0.05, 0, 0);
-    const crest = new THREE.ExtrudeGeometry(cs, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1 });
-    add(hg, crest, mats.trim, [0, 0.07, 0.11], [-0.4, 0, 0], [0.7 * (def.crestScale ?? 1), 0.7 * (def.crestScale ?? 1), 1]);
-    // top spike + plume tassel (hongying)
-    add(hg, new THREE.CylinderGeometry(0.008, 0.02, 0.1, 8), mats.trim, [0, 0.14, -0.01]);
-    const plume = new THREE.Group(); plume.position.set(0, 0.19, -0.01); hg.add(plume); B.plume = plume;
+    add(hg, new THREE.CylinderGeometry(0.14, 0.15, 0.012, 28, 1, true, -Math.PI * 0.45, Math.PI * 0.9), hTrim, [0, -0.005, 0.0], [0.15, 0, 0]);
+    if (def.crest === 'gem') {
+      // plain steel cap with a jewelled badge on the brow
+      add(hg, new THREE.CylinderGeometry(0.026, 0.026, 0.01, 6), hTrim, [0, 0.045, 0.126], [Math.PI / 2 - 0.35, 0, 0]);
+      add(hg, new THREE.SphereGeometry(0.017, 12, 8), mats.gem, [0, 0.046, 0.131], [0, 0, 0], [1, 1.2, 0.6]);
+    } else if (def.crest === 'wings') {
+      // gilded face frame: a raised brow plate and flared wings over the temples
+      add(hg, new THREE.CylinderGeometry(0.135, 0.138, 0.05, 28, 1, true, -Math.PI * 0.42, Math.PI * 0.84), hTrim, [0, 0.012, 0.004], [0.12, 0, 0]);
+      const ws = new THREE.Shape();
+      ws.moveTo(0, 0); ws.bezierCurveTo(0.03, 0.05, 0.07, 0.09, 0.1, 0.15); ws.bezierCurveTo(0.06, 0.12, 0.02, 0.1, -0.01, 0.1); ws.lineTo(0, 0);
+      const wing = new THREE.ExtrudeGeometry(ws, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 1 });
+      for (const sx of [1, -1]) add(hg, wing, hTrim, [sx * 0.118, -0.08, 0.05], [0, sx * 1.25, sx * -0.35], [sx, 1, 1]);
+    } else {
+      // golden crest: flame-shaped front ornament
+      const cs = new THREE.Shape();
+      cs.moveTo(0, 0); cs.bezierCurveTo(0.09, 0.05, 0.1, 0.14, 0.03, 0.22); cs.bezierCurveTo(0.05, 0.13, 0.02, 0.08, 0, 0.07);
+      cs.bezierCurveTo(-0.02, 0.08, -0.05, 0.13, -0.03, 0.22); cs.bezierCurveTo(-0.1, 0.14, -0.09, 0.05, 0, 0);
+      const crest = new THREE.ExtrudeGeometry(cs, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1 });
+      add(hg, crest, hTrim, [0, 0.07, 0.11], [-0.4, 0, 0], [0.7 * (def.crestScale ?? 1), 0.7 * (def.crestScale ?? 1), 1]);
+    }
+    // top spike + plume tassel (hongying), or a long flowing mane
+    const mane = def.plume === 'mane';
+    add(hg, new THREE.CylinderGeometry(0.008, 0.02, 0.1, 8), hTrim, [0, 0.14, -0.01]);
+    const plume = new THREE.Group(); plume.position.set(0, mane ? 0.16 : 0.19, mane ? -0.03 : -0.01); hg.add(plume); B.plume = plume;
     const strands = [];
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2, sp = 0.04 + (i % 3) * 0.015, L = 0.38 + ((i * 7) % 5) * 0.04;
+    const nStrands = mane ? 40 : 18;
+    for (let i = 0; i < nStrands; i++) {
+      const a = (i / 18) * Math.PI * 2, sp = 0.04 + (i % 3) * 0.015;
+      const L = mane ? 0.42 + ((i * 7) % 6) * 0.05 : 0.38 + ((i * 7) % 5) * 0.04;
       const pts = [];
       for (let k = 0; k <= 6; k++) {
         const t = k / 6;
-        pts.push(new THREE.Vector3(Math.cos(a) * sp * t * 1.5, 0.05 * Math.sin(t * Math.PI) - t * t * L * 0.75, -t * L * 0.85 + Math.sin(a) * sp * t));
+        if (mane) {
+          // fans out to both sides of the helmet, then falls past the cheeks and down the back
+          // side strands run longest; the ones down the back are shorter and wavy so they don't hide the cape
+          const f = -1 + (2 * i) / (nStrands - 1), Lf = L * (0.55 + 0.45 * Math.abs(f));
+          const wave = Math.sin(t * Math.PI * 2 + i) * 0.025 * t;
+          pts.push(new THREE.Vector3(f * (0.05 + 0.15 * Math.min(1, t * 3)) + wave, 0.04 * Math.sin(t * Math.PI) - t * Lf * 0.9, -0.03 - t * Lf * (0.6 - Math.abs(f) * 0.3)));
+        } else {
+          pts.push(new THREE.Vector3(Math.cos(a) * sp * t * 1.5, 0.05 * Math.sin(t * Math.PI) - t * t * L * 0.75, -t * L * 0.85 + Math.sin(a) * sp * t));
+        }
       }
-      const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.012, 5);
+      const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, mane ? 0.02 : 0.012, 5);
       const tp = tg.attributes.position;
       // taper toward the tip
       for (let j = 0; j < tp.count; j++) {
@@ -301,6 +357,15 @@ export function buildWarrior(def) {
     // neck guard (lamellar flap) & cheek guards
     lamellar(hg, mats.armor, { rows: 2, cols: 12, y0: -0.03, dy: 0.05, r0: 0.125, r1: 0.135, zScale: 1.05, arc: Math.PI * 0.95, start: Math.PI * 0.525, pw: 0.04, ph: 0.06, tilt: 0.3 });
     for (const sx of [1, -1]) add(hg, new THREE.CylinderGeometry(0.128, 0.13, 0.11, 10, 1, true, sx > 0 ? 0.9 : Math.PI * 2 - 0.9 - 0.7, 0.7), mats.armor, [0, -0.07, 0.01]);
+  } else if (def.headband === 'bandana') {
+    // cloth wrapped over the crown, a jewelled band at the brow and two tails knotted at the back
+    const bm = mats.headband ?? mats.cloth2;
+    add(B.head, new THREE.SphereGeometry(0.112, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), bm, [0, 0.085, -0.012], [0.22, 0, 0], [0.98, 0.95, 1.06]);
+    add(B.head, new THREE.TorusGeometry(0.104, 0.016, 6, 26), bm, [0, 0.1, -0.005], [Math.PI / 2 + 0.2, 0, 0]);
+    add(B.head, new THREE.TorusGeometry(0.106, 0.006, 5, 26, Math.PI * 0.5), mats.trim, [0, 0.105, 0.0], [Math.PI / 2 + 0.2, 0, Math.PI * 0.25]);
+    add(B.head, new THREE.SphereGeometry(0.016, 8, 6), mats.trim, [0, 0.122, 0.1], [0, 0, 0], [1.4, 1, 0.6]);
+    add(B.head, new THREE.SphereGeometry(0.025, 8, 6), bm, [0, 0.08, -0.115]);
+    for (const sx of [1, -1]) add(B.head, new THREE.BoxGeometry(0.035, 0.16, 0.012), bm, [sx * 0.03, 0.0, -0.12], [0.25, 0, sx * 0.3]);
   } else if (def.headband) {
     add(B.head, new THREE.TorusGeometry(0.103, 0.014, 6, 26), mats.cloth2, [0, 0.1, -0.005], [Math.PI / 2 + 0.2, 0, 0]);
   }
@@ -309,8 +374,8 @@ export function buildWarrior(def) {
   // --- arms
   for (const [side, sx] of [['L', 1], ['R', -1]]) {
     const ua = B['upperArm' + side], fa = B['foreArm' + side], hd = B['hand' + side];
-    add(ua, new THREE.CapsuleGeometry(0.058 * bulk, 0.2, 6, 12), mats.cloth2, [0, -0.14, 0]);
-    add(fa, new THREE.CapsuleGeometry(0.048 * bulk, 0.18, 6, 12), mats.cloth, [0, -0.12, 0]);
+    add(ua, new THREE.CapsuleGeometry(0.058 * bulk, 0.2, 6, 12), def.bareArms ? mats.skin : mats.cloth2, [0, -0.14, 0]);
+    add(fa, new THREE.CapsuleGeometry(0.048 * bulk, 0.18, 6, 12), def.bareArms ? mats.skin : mats.cloth, [0, -0.12, 0]);
     if (armored) {
       // pauldron: three layered shells
       for (let k = 0; k < 3; k++) {
@@ -394,7 +459,7 @@ export function buildWarrior(def) {
 
 // ------------------------------------------------------------------ pose application
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _pole = new THREE.Vector3(), _hint = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+const _q = new THREE.Quaternion(), _mq = new THREE.Quaternion(), _e = new THREE.Euler();
 const _target = new THREE.Vector3(), _grip = new THREE.Vector3(), _sh = new THREE.Vector3(), _dir = new THREE.Vector3(), _tmp = new THREE.Vector3();
 
 export class Rig {
@@ -530,7 +595,17 @@ export class Rig {
         t.rotateZ(Math.sin(a * 3) * 0.3);
       }
     }
-    if (this.B.plume) {
+    if (this.B.plume && this.def.plume === 'mane') {
+      // a long mane keeps hanging as it would from an upright head (only turning with the body),
+      // so it doesn't fan up when the head bows or the body leans
+      const p = this.B.plume;
+      p.rotation.set(0, 0, 0);
+      p.parent.updateMatrixWorld(true);
+      p.parent.getWorldQuaternion(_q).invert();
+      this.root.getWorldQuaternion(_mq);
+      _e.setFromQuaternion(_mq, 'YXZ'); _e.set(0.25 + this.plumeAng.x, _e.y, this.plumeAng.y, 'YXZ');
+      p.quaternion.copy(_q).multiply(_mq.setFromEuler(_e));
+    } else if (this.B.plume) {
       this.B.plume.rotation.x = 0.25 + this.plumeAng.x;
       this.B.plume.rotation.z = this.plumeAng.y;
     }
