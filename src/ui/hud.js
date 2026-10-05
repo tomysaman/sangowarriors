@@ -2,7 +2,22 @@ import { PATH } from '../world/level.js';
 import { DIFFICULTY, DIFFICULTY_ORDER } from '../data/difficulty.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
+// `html` is only for fixed markup. Character names, dialogue and story text go through
+// textContent (`el`, `nameNodes`, `rich`) so data is never parsed as HTML.
 const html = (s) => { const t = document.createElement('template'); t.innerHTML = s.trim(); return t.content.firstElementChild; };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const nameNodes = (cn, name) => [el('span', 'cn', cn), name];
+// Story card: a string, or an array of strings and { b | date | name } spans. '\n' becomes <br>.
+function rich(card) {
+  const out = [];
+  for (const part of Array.isArray(card) ? card : [card]) {
+    if (typeof part === 'string') part.split('\n').forEach((s, i) => { if (i) out.push(el('br')); if (s) out.push(s); });
+    else if (part.b != null) out.push(el('b', null, part.b));
+    else if (part.date != null) out.push(el('span', 'date', part.date));
+    else if (part.name != null) out.push(el('span', 'name', part.name));
+  }
+  return out;
+}
 
 export class HUD {
   constructor(root) {
@@ -77,7 +92,7 @@ export class HUD {
     const card = wrap.querySelector('.card');
     input.clearUI();
     for (const c of list) {
-      card.innerHTML = c;
+      card.replaceChildren(...rich(c));
       card.classList.add('on');
       await waitFor(input, 6500);
       card.classList.remove('on');
@@ -90,7 +105,7 @@ export class HUD {
 
   showHUD(v) { this.el.hud.classList.toggle('hidden', !v); }
   setPlayer(def) {
-    this.el.pName.innerHTML = `<span class="cn">${def.cn}</span>${def.name}`;
+    this.el.pName.replaceChildren(...nameNodes(def.cn, def.name));
     if (this.portraits[def.id]) this.el.pImg.src = this.portraits[def.id];
   }
   objective(text) {
@@ -106,7 +121,8 @@ export class HUD {
     if (!officer) { this.el.boss.classList.add('hidden'); this.bossRef = null; return; }
     this.bossRef = officer;
     const d = officer.def;
-    this.el.bossName.innerHTML = `<span class="cn">${d.cn}</span>${d.name}<small>${d.title}</small>${d.rtk ? `<em class="rtk">統率 ${d.rtk.lea} · 武力 ${d.rtk.war} · 知力 ${d.rtk.int}</em>` : ''}`;
+    this.el.bossName.replaceChildren(...nameNodes(d.cn, d.name), el('small', null, d.title),
+      ...(d.rtk ? [el('em', 'rtk', `統率 ${d.rtk.lea} · 武力 ${d.rtk.war} · 知力 ${d.rtk.int}`)] : []));
     const img = this.portraits[d.id];
     this.el.bossImg.style.display = img ? '' : 'none';
     if (img) this.el.bossImg.src = img;
@@ -120,7 +136,7 @@ export class HUD {
     for (const [id, name, cn, text] of lines) {
       d.dlgImg.src = this.portraits[id] || '';
       d.dlgImg.style.display = this.portraits[id] ? '' : 'none';
-      d.dlgWho.innerHTML = `<span class="cn">${cn}</span>${name}`;
+      d.dlgWho.replaceChildren(...nameNodes(cn, name));
       d.dlgLine.textContent = '';
       let i = 0; let skip = false;
       const full = text;
@@ -228,9 +244,10 @@ export class HUD {
       <div>${win ? 'Zhao Yun carried the young lord through a hundred thousand men.' : 'Zhao Yun has fallen at Changban.'}</div>
       <table><tr><td>K.O. count</td><td>${stats.ko}</td></tr><tr><td>Officers defeated</td><td>${stats.officers}</td></tr>
       <tr><td>Max combo</td><td>${stats.maxCombo}</td></tr><tr><td>Time</td><td>${fmt(stats.time)}</td></tr>
-      ${difficulty ? `<tr><td>Difficulty</td><td>${difficulty}</td></tr>` : ''}</table>
+      ${difficulty ? '<tr><td>Difficulty</td><td class="diff"></td></tr>' : ''}</table>
       ${win ? `<div class="rank">RANK ${rank}</div>` : ''}
       <button class="btn">${win ? 'PLAY AGAIN' : 'RETRY FROM CHECKPOINT'}</button></div>`);
+    if (difficulty) $('.diff', el).textContent = difficulty;
     el.querySelector('button').addEventListener('click', () => { el.remove(); onRetry(); });
     this.root.append(el);
     return el;

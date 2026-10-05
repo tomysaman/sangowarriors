@@ -40,6 +40,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #cards .card { max-width: 760px; text-align: center; padding: 0 30px; font-size: clamp(20px, 2vw, 28px); line-height: 1.6; color: #efe2c4; opacity: 0; transition: opacity 1.1s; }
 #cards .card.on { opacity: 1; }
 #cards .card .date { display: block; font-family: var(--title); letter-spacing: .4em; font-size: 14px; color: var(--gold); margin-bottom: 18px; }
+#cards .card .name { font-family: 'Ma Shan Zheng', serif; font-size: 1.6em; color: #f3dc94; }
 #cards .skip { position: absolute; bottom: 26px; right: 32px; font-size: 13px; letter-spacing: .25em; color: #887a60; }
 
 /* ---------- HUD */

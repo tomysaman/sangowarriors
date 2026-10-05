@@ -5,9 +5,9 @@ export const CHAPTER1 = {
   id: 'changban',
   title: 'The Lone Rider of Changban',
   intro: [
-    `<span class="date">208 AD · JING PROVINCE</span>Cao Cao's armoured cavalry has overtaken Liu Bei's retreating column at Changban. Soldiers and refugees scatter beneath the blue banners of Wei.`,
-    `In the chaos, Liu Bei's household is lost: <b>Lady Mi</b> and the infant heir, <b>A Dou</b>.`,
-    `One general turns back alone into a sea of enemies.<br><br><span style="font-family:'Ma Shan Zheng',serif;font-size:1.6em;color:#f3dc94">趙雲 子龍</span><br>Zhao Yun of Changshan.`,
+    [{ date: '208 AD · JING PROVINCE' }, "Cao Cao's armoured cavalry has overtaken Liu Bei's retreating column at Changban. Soldiers and refugees scatter beneath the blue banners of Wei."],
+    ["In the chaos, Liu Bei's household is lost: ", { b: 'Lady Mi' }, ' and the infant heir, ', { b: 'A Dou' }, '.'],
+    ['One general turns back alone into a sea of enemies.\n\n', { name: '趙雲 子龍' }, '\nZhao Yun of Changshan.'],
   ],
   beats: {
     start: {
@@ -35,7 +35,7 @@ export const CHAPTER1 = {
         ['zhaoyun', 'Zhao Yun', '趙雲', 'My lady, I will carry you both. Lean on me, we leave at once.'],
         ['ladymi', 'Lady Mi', '糜夫人', 'I am wounded and cannot ride. If I come with you, all three of us will fall. Protect A Dou. Do not let me be your burden.'],
       ],
-      card: `Lady Mi laid the child down and threw herself into the well.<br><br>Zhao Yun pushed down the crumbling wall to cover her, so that the enemy could not take her body.`,
+      card: `Lady Mi laid the child down and threw herself into the well.\n\nZhao Yun pushed down the crumbling wall to cover her, so that the enemy could not take her body.`,
       after: [['zhaoyun', 'Zhao Yun', '趙雲', 'Young master... hold fast. I will carry you to your father through any army.']],
       objective: 'Carry A Dou to Changban Bridge',
     },
@@ -57,7 +57,7 @@ export const CHAPTER1 = {
         ['zhangfei', 'Zhang Fei', '張飛', 'Let them come!'],
       ],
       roar: ['zhangfei', 'Zhang Fei', '張飛', 'I AM ZHANG YIDE OF YAN! WHO DARES FIGHT ME TO THE DEATH?!'],
-      card: `Zhang Fei's roar shook Changban Bridge. Fearing an ambush, Cao Cao's vanguard turned and fled.<br><br>Zhao Yun brought A Dou safely to Liu Bei, having cut his way through the enemy host, the Qinggang Sword at his side.`,
+      card: `Zhang Fei's roar shook Changban Bridge. Fearing an ambush, Cao Cao's vanguard turned and fled.\n\nZhao Yun brought A Dou safely to Liu Bei, having cut his way through the enemy host, the Qinggang Sword at his side.`,
     },
   },
 };
