@@ -6,6 +6,8 @@ import { makePose } from './pose.js';
 import { groundAt, constrain, pushOutOfHouses, steerAround } from '../world/level.js';
 import { angleDiff, dampAngle } from '../core/noise.js';
 import { sweepHits } from './combat.js';
+import { D } from '../data/difficulty.js';
+import { applyGates, gateWaypoint } from '../world/gates.js';
 
 const DIE = { ...HERO_MOVES.KNOCKDOWN, dur: 1.05, keys: HERO_MOVES.KNOCKDOWN.keys.slice(0, 4), advance: [[0, 0.5, -3]], iframes: null };
 const _w = new THREE.Matrix4(), _b = new THREE.Vector3(), _t = new THREE.Vector3();
@@ -81,7 +83,7 @@ export class Officer {
       } else { this.state = 'hurt'; this.yaw = toFrom; this.play(HERO_MOVES.HURT); }
     }
     // guard more after being hit
-    if (Math.random() < this.def.guard * 0.6) this.wantGuard = true;
+    if (Math.random() < this.def.guard * D.officerGuard * 0.6) this.wantGuard = true;
     return 'hit';
   }
 
@@ -101,7 +103,8 @@ export class Officer {
       this.yaw = dampAngle(this.yaw, face, 4, dt);
       if (this.engaged) this.state = 'chase';
     } else if (this.state === 'chase') {
-      const wp = steerAround(this.pos.x, this.pos.z, hero.pos.x, hero.pos.z);
+      const gw = gateWaypoint(this.pos.x, this.pos.z, hero.pos.x, hero.pos.z);
+      const wp = gw ?? steerAround(this.pos.x, this.pos.z, hero.pos.x, hero.pos.z);
       const routed = wp.x !== hero.pos.x || wp.z !== hero.pos.z;
       this.yaw = dampAngle(this.yaw, routed ? Math.atan2(wp.x - this.pos.x, wp.z - this.pos.z) : face, 6, dt);
       const want = routed ? 0 : this.style === 'sword' ? 1.8 : 2.4;
@@ -110,8 +113,8 @@ export class Officer {
       if (this.wantGuard && dist < 4) { this.wantGuard = false; this.state = 'guard'; this.guardT = 0.8 + Math.random() * 0.7; this.anim.stop(0.1); }
       else if (!routed && dist < want + 0.6 && this.cool <= 0 && hero.alive) {
         this.state = 'attack';
-        this.moveArmor = Math.random() < 0.55;
-        this.combo = 1 + Math.floor(Math.random() * (this.style === 'sword' ? 2 : 3));
+        this.moveArmor = Math.random() < Math.min(0.95, D.armorChance + this.def.armor);
+        this.combo = 1 + Math.floor(Math.random() * (this.style === 'sword' ? 2 : 3)) + this.def.combo;
         this.play(this.moves[Math.floor(Math.random() * this.moves.length)]);
       }
     } else if (this.state === 'guard') {
@@ -140,14 +143,14 @@ export class Officer {
           if (p || areaOK) {
             this.hitDone.add(i);
             const heavy = h.react === 'knockback' || h.react === 'launch';
-            if (hero.takeHit(Math.max(10, h.dmg), this.pos, heavy)) this.ctx.onHeroHurt?.(p || hero.pos, heavy);
+            if (hero.takeHit(Math.max(10, h.dmg) * this.def.dmg * D.enemyDmg, this.pos, heavy)) this.ctx.onHeroHurt?.(p || hero.pos, heavy);
           }
         }
       });
       if (this.anim.done) {
         this.combo--;
         if (this.combo > 0 && dist < 3.5) this.play(this.moves[Math.floor(Math.random() * this.moves.length)]);
-        else { this.state = 'chase'; this.anim.stop(0.2); this.move = null; this.cool = (1.3 + Math.random() * 1.2) * (1.4 - this.def.aggression); if (Math.random() < this.def.guard) this.wantGuard = true; }
+        else { this.state = 'chase'; this.anim.stop(0.2); this.move = null; this.cool = (1.3 + Math.random() * 1.2) * (1.4 - this.def.aggression) * D.officerCool; if (Math.random() < this.def.guard * D.officerGuard) this.wantGuard = true; }
       }
     } else if (this.state === 'hurt' || this.state === 'down') {
       const m = this.move, mt = this.anim.mt;
@@ -174,6 +177,7 @@ export class Officer {
     }
     pushOutOfHouses(this.pos, 0.5);
     constrain(this.pos, 0.5);
+    applyGates(this, this.pos, 0.5);
     this.pos.y = groundAt(this.pos.x, this.pos.z);
     this.rig.root.rotation.y = this.yaw;
     const sp = this.state === 'chase' ? speed : 0;

@@ -20,9 +20,14 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #title .cn { font-family: var(--cn); font-size: clamp(54px, 9vw, 120px); color: #f6ecd6; text-shadow: 0 0 40px rgba(255,170,80,.45), 0 4px 0 #000; letter-spacing: .08em; line-height: 1; }
 #title h1 { font-family: var(--title); font-weight: 900; font-size: clamp(28px, 4.4vw, 62px); margin: 10px 0 0; letter-spacing: .22em; color: var(--gold2);
   background: linear-gradient(180deg, #fff3cf 0%, #d9b45a 55%, #8a6a2a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 3px 3px rgba(0,0,0,.8)); }
-#title .chapter { font-size: clamp(16px, 1.6vw, 22px); letter-spacing: .35em; text-transform: uppercase; color: #e8d7b0; margin-top: 14px; }
+#title .chapter { font-size: clamp(16px, 1.6vw, 22px); letter-spacing: .35em; text-transform: uppercase; color: #f1e4c4; margin-top: 14px; text-shadow: 0 1px 2px #000, 0 0 14px rgba(0,0,0,.9); }
 #title .chapter b { color: var(--red); font-weight: 700; }
-#title .press { margin-top: 46px; font-family: var(--title); letter-spacing: .4em; font-size: 15px; animation: pulse 2s infinite; color: #fff; }
+#title .difficulty { margin-top: 38px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+#title .difficulty button { background: rgba(10,6,2,.45); border: 1px solid #6a5530; color: #cbb994; font-family: var(--title); font-size: 15px; letter-spacing: .25em; padding: 8px 22px 8px 26px; cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+#title .difficulty button:hover { border-color: var(--gold); color: #fff3cf; }
+#title .difficulty button.on { background: linear-gradient(180deg, #e9c877, #a8823a); color: #1a1208; border-color: #f3dc9a; box-shadow: 0 0 18px rgba(217,180,90,.45); }
+#title .difficulty .desc { flex-basis: 100%; text-align: center; font-size: 16px; font-style: italic; color: #f1e4c4; min-height: 1.4em; margin-top: 4px; text-shadow: 0 1px 2px #000, 0 0 14px rgba(0,0,0,.9); }
+#title .press { margin-top: 30px; font-family: var(--title); letter-spacing: .4em; font-size: 15px; animation: pulse 2s infinite; color: #fff; }
 #title .controls { position: absolute; bottom: 28px; display: grid; grid-template-columns: repeat(4, auto); gap: 6px 26px; font-size: 14px; color: #cbb994; }
 #title .controls span b { color: var(--gold2); font-family: var(--title); font-size: 12px; border: 1px solid #6a5530; padding: 1px 6px; margin-right: 6px; border-radius: 3px; }
 #title .quality { position: absolute; top: 22px; right: 26px; font-size: 13px; letter-spacing: .15em; color: #a99; }
@@ -79,6 +84,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #boss .nm { font-size: 20px; letter-spacing: .12em; text-shadow: 0 2px 2px #000; }
 #boss .nm .cn { font-family: var(--cn); color: #ff9a8a; margin-right: 8px; }
 #boss .nm small { display: block; font-size: 12px; letter-spacing: .3em; color: #b8a888; text-transform: uppercase; }
+#boss .nm .rtk { display: block; font-style: normal; font-family: var(--cn); font-size: 12px; letter-spacing: .15em; color: #e0c88a; margin-top: 2px; }
 #boss .bar.hp > i.fill { background: linear-gradient(180deg, #ff7a5a, #b0281c 60%, #6a140c); }
 
 #toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity .4s, transform .4s; }

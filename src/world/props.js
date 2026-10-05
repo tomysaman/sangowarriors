@@ -11,7 +11,7 @@ import {
 
 export const clothUniforms = { uTime: { value: 0 } };
 
-function windCloth(mat, amp = 0.35) {
+export function windCloth(mat, amp = 0.35) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = clothUniforms.uTime;
     sh.vertexShader = sh.vertexShader

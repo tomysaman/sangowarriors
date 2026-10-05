@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { groundAt, constrain, pushOutOfHouses, pathInfo, pointAt, CORRIDOR, steerAround } from '../world/level.js';
 import { angleDiff, clamp } from '../core/noise.js';
 import { makeArmorTextures } from '../world/textures.js';
+import { D } from '../data/difficulty.js';
+import { applyGates, gateWaypoint } from '../world/gates.js';
 
 // ------------------------------------------------------------------ geometry (vertex-coloured, merged per part)
 function colored(geo, rgb) {
@@ -71,6 +73,16 @@ const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 export const MAX_GRUNTS = 170;
 
 // ------------------------------------------------------------------ crowd
+// Strongest officer command reaching a point: full within 18 m, fading out by 30 m.
+function commandAt(cmds, x, z) {
+  let c = 0;
+  for (const o of cmds) {
+    const k = Math.min(1, Math.max(0, (30 - Math.hypot(o.pos.x - x, o.pos.z - z)) / 12));
+    c = Math.max(c, o.def.command * k);
+  }
+  return c;
+}
+
 export class Crowd {
   constructor(scene) {
     const parts = buildParts();
@@ -96,6 +108,8 @@ export class Crowd {
     this.attackers = 0;
     this.maxAttackers = 4;
     this.tokenCd = 0;
+    this.commanders = [];   // officers whose Leadership (def.command) sharpens nearby soldiers
+    this.cmdAtHero = 0;
     this.grid = new Map();
     this.activeCount = 0;
     this.onKO = null; this.onPlayerHit = null; this.fx = null; this.audio = null;
@@ -107,11 +121,11 @@ export class Crowd {
     const captain = !!opts.captain;
     Object.assign(g, {
       active: true, alive: true, x, z, y: groundAt(x, z), vx: 0, vz: 0, vy: 0, yaw: opts.yaw ?? Math.random() * 6.28,
-      state: 'chase', t: 0, hp: captain ? 110 : 45, maxHp: captain ? 110 : 45, type: opts.type ?? (Math.random() < 0.6 ? 'spear' : 'sword'),
-      scale: captain ? 1.12 : 0.94 + Math.random() * 0.1, phase: Math.random(), speed: 3.4 + Math.random() * 1.3,
+      state: 'chase', t: 0, hp: opts.hp ?? (captain ? 110 : 45) * D.gruntHp, maxHp: opts.hp ?? (captain ? 110 : 45) * D.gruntHp, type: opts.type ?? (Math.random() < 0.6 ? 'spear' : 'sword'),
+      scale: opts.scale ?? (captain ? 1.12 : 0.94 + Math.random() * 0.1), phase: Math.random(), speed: 3.4 + Math.random() * 1.3,
       slot: Math.random() * Math.PI * 2, ring: 3.2 + Math.random() * 2.2, hasToken: false, flash: 0, pitch: 0, roll: 0, spin: 0,
       captain, hitIds: new Set(), lastHitWindow: -1, downT: 0, deadT: 0, airborne: false, sink: 0, idleT: Math.random() * 2,
-      dragged: false, aggro: opts.aggro ?? 1, tint: 0.82 + Math.random() * 0.3, hue: (Math.random() - 0.5) * 0.12,
+      dragged: false, aggro: opts.aggro ?? 1, post: opts.post ?? null, keep: !!opts.keep, gateCaptain: opts.gateCaptain ?? null, def: opts.def ?? null, _gateSide: {}, cmd: 0, tint: 0.82 + Math.random() * 0.3, hue: (Math.random() - 0.5) * 0.12,
     });
     return g;
   }
@@ -182,6 +196,14 @@ export class Crowd {
     const hx = hero.pos.x, hz = hero.pos.z;
     this.rebuildGrid();
     this.tokenCd -= dt;
+    const cmds = this.commanders.filter((o) => o.active && o.alive && o.def.command > 0);
+    this.cmdAtHero = commandAt(cmds, hx, hz);
+    this.frontAttackers = 0;
+    for (const g of this.g) {
+      if (!g.active || !g.hasToken) continue;
+      const ax = g.x - hx, az = g.z - hz;
+      if ((ax * hero.forward.x + az * hero.forward.z) / (Math.hypot(ax, az) || 1) > 0.3) this.frontAttackers++;
+    }
     let active = 0;
     for (const g of this.g) {
       if (!g.active) continue;
@@ -194,6 +216,7 @@ export class Crowd {
       if (g.airborne) {
         g.vy -= 22 * dt;
         g.x += g.vx * dt; g.z += g.vz * dt; g.y += g.vy * dt;
+        applyGates(g, g, 0.4);
         g.vx *= Math.exp(-0.6 * dt); g.vz *= Math.exp(-0.6 * dt);
         g.pitch -= g.spin * dt * 0.5;
         const gy = groundAt(g.x, g.z);
@@ -213,6 +236,7 @@ export class Crowd {
         if (g.t > 2.6) g.sink += dt * 0.35;
         if (g.sink > 0.6 || dist > 90) { this.release(g); continue; }
       } else {
+        g.cmd = cmds.length ? commandAt(cmds, g.x, g.z) : 0;
         this.think(g, dt, dist, dx, dz, hero, time);
         g.x += g.vx * dt; g.z += g.vz * dt;
         if (g.state === 'stagger') { g.vx *= Math.exp(-7 * dt); g.vz *= Math.exp(-7 * dt); }
@@ -235,8 +259,9 @@ export class Crowd {
         }
         pushOutOfHouses(g, 0.4);
         constrain(g, 0.4);
+        applyGates(g, g, 0.4);
         g.y = groundAt(g.x, g.z);
-        if (dist > 95) { this.release(g); continue; }
+        if (dist > 95 && !g.keep) { this.release(g); continue; }
       }
       this.pose(g, time);
     }
@@ -263,9 +288,12 @@ export class Crowd {
     if (g.state === 'down') { if (g.t > 1.0) { g.state = 'getup'; g.t = 0; } return; }
     if (g.state === 'getup') { g.pitch = -Math.PI / 2 * Math.max(0, 1 - g.t / 0.45); if (g.t > 0.5) { g.pitch = 0; g.state = 'chase'; g.t = 0; } return; }
     if (g.state === 'windup') {
-      g.vx = 0; g.vz = 0;
+      // a commanded soldier keeps stepping in so the hero can't just walk out of his reach
+      const reach = g.type === 'spear' ? 1.9 : 1.35;
+      const step = dist > reach ? Math.min(g.speed, (dist - reach) * 4) * g.cmd : 0;
+      g.vx = dx / dist * step; g.vz = dz / dist * step;
       turn(faceHero, 5);
-      if (g.t > 0.6) { g.state = 'strike'; g.t = 0; this.audio?.play('swing', 0.4); }
+      if (g.t > 0.6 - 0.07 * g.cmd) { g.state = 'strike'; g.t = 0; this.audio?.play('swing', 0.4); }
       return;
     }
     if (g.state === 'strike') {
@@ -273,29 +301,47 @@ export class Crowd {
       if (g.t < 0.05 && !g.struck) {
         g.struck = true;
         const ang = Math.abs(angleDiff(g.yaw, faceHero));
-        if (dist < reach && ang < 0.8) this.onPlayerHit?.(g, g.captain ? 16 : 8);
+        if (dist < reach && ang < 0.8) this.onPlayerHit?.(g, (g.captain ? 16 : 8) * D.enemyDmg);
       }
       const lunge = g.t < 0.12 ? 3.5 : 0;
       g.vx = Math.sin(g.yaw) * lunge; g.vz = Math.cos(g.yaw) * lunge;
-      if (g.t > 0.55) { g.state = 'chase'; g.t = 0; g.struck = false; if (g.hasToken) { g.hasToken = false; this.attackers--; } g.cool = 1.5 + Math.random() * 2; }
+      if (g.t > 0.55) { g.state = 'chase'; g.t = 0; g.struck = false; if (g.hasToken) { g.hasToken = false; this.attackers--; } g.cool = (1.5 + Math.random() * 2) * D.gruntCool * (1 - 0.3 * g.cmd); }
       return;
     }
-    // chase / surround
+    // chase / surround. Soldiers near a well-led officer (g.cmd, from his Leadership) commit more
+    // attackers, recover faster, come at the hero's blind side and close off his escape route.
+    // Their movement speed is unchanged.
+    const c = g.cmd, hv = hero.vel;
     g.cool = (g.cool ?? 0) - dt;
-    if (!g.hasToken && this.tokenCd <= 0 && this.attackers < this.maxAttackers && dist < 6 && g.cool <= 0 && hero.alive && Math.random() < dt * 3 * g.aggro) {
-      g.hasToken = true; this.attackers++; this.tokenCd = 0.25 + Math.random() * 0.4;
+    const base = this.maxAttackers + D.extraAttackers;
+    const cap = Math.max(base, Math.min(8, base + Math.round(this.cmdAtHero * 2))); // command adds up to 2, never past 8
+    if (!g.hasToken && this.tokenCd <= 0 && this.attackers < cap && dist < 6 && g.cool <= 0 && hero.alive) {
+      // a commanded squad keeps at most two attackers in front of the hero; the rest go in from his sides and back
+      const inFront = (-dx * hero.forward.x - dz * hero.forward.z) / dist > 0.3;
+      if (!(c > 0.3 && inFront && this.frontAttackers >= 2) && Math.random() < dt * 3 * g.aggro * D.aggro * (1 + c)) {
+        g.hasToken = true; this.attackers++; this.tokenCd = (0.25 + Math.random() * 0.4) * D.tokenGap * (1 - 0.4 * c);
+        if (inFront) this.frontAttackers++;
+      }
     }
     let tx, tz, desired;
     if (g.hasToken) {
       desired = g.type === 'spear' ? 1.9 : 1.35;
-      tx = hero.pos.x; tz = hero.pos.z;
+      tx = hero.pos.x + hv.x * 0.3 * c; tz = hero.pos.z + hv.z * 0.3 * c;
       if (dist < desired + 0.2) { g.state = 'windup'; g.t = 0; g.struck = false; this.fx?.weaponGlint?.(g); return; }
     } else {
       g.slot += dt * 0.25 * (g.id % 2 ? 1 : -1);
-      desired = g.ring;
-      tx = hero.pos.x + Math.sin(g.slot) * g.ring; tz = hero.pos.z + Math.cos(g.slot) * g.ring;
+      desired = g.ring * (1 - 0.25 * c);
+      tx = hero.pos.x + Math.sin(g.slot) * desired; tz = hero.pos.z + Math.cos(g.slot) * desired;
+      const vs = Math.hypot(hv.x, hv.z);
+      if (c > 0 && vs > 0.5) { const lead = Math.min(4, vs * 0.6 * c); tx += hv.x / vs * lead; tz += hv.z / vs * lead; }
     }
-    const wp = steerAround(g.x, g.z, tx, tz, 1.0);
+    // gate captains hold their post when the hero strays too far from it
+    if (g.post && Math.hypot(hero.pos.x - g.post.x, hero.pos.z - g.post.z) > g.post.r) {
+      if (g.hasToken) { g.hasToken = false; this.attackers--; }
+      tx = g.post.x; tz = g.post.z;
+    }
+    const gw = gateWaypoint(g.x, g.z, tx, tz);
+    const wp = gw ?? steerAround(g.x, g.z, tx, tz, 1.0);
     if (wp.x !== tx || wp.z !== tz) { tx = wp.x; tz = wp.z; }
     const ex = tx - g.x, ez = tz - g.z, ed = Math.hypot(ex, ez);
     const moving = ed > (g.hasToken ? 0.1 : 0.6);

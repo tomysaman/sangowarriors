@@ -6,6 +6,8 @@ import { makePose } from './pose.js';
 import { Cape } from './cloth.js';
 import { groundAt, constrain, pushOutOfHouses } from '../world/level.js';
 import { angleDiff, dampAngle } from '../core/noise.js';
+import { D } from '../data/difficulty.js';
+import { applyGates } from '../world/gates.js';
 
 const AIR = { dur: 999, chainAt: 999, bufferFrom: 999, hits: [], advance: [], next: {}, keys: [
   { t: 0, p: makePose({ hipsY: -0.05, chest: [0.15, 0, 0], grip: [-0.3, 1.05, 0.05], spear: [Math.PI + 0.3, 0.2, 0], lfree: 1, lpos: [0.3, 1.2, 0.1], footL: [0.15, 0.35, 0.2], footR: [-0.15, 0.25, -0.15] }) },
@@ -179,6 +181,7 @@ export class Hero {
     }
     pushOutOfHouses(this.pos, 0.5);
     constrain(this.pos, 0.5);
+    applyGates(this, this.pos, 0.5);
     if (this.state !== 'air' && !(this.move?.air)) this.pos.y = groundAt(this.pos.x, this.pos.z);
     this.rig.root.rotation.y = this.yaw;
     this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
@@ -229,7 +232,7 @@ export class Hero {
   takeHit(dmg, from, heavy = false) {
     if (!this.alive || this.invulnerable) return false;
     this.hp -= dmg;
-    this.musou = Math.min(100, this.musou + dmg * 0.35);
+    this.musou = Math.min(100, this.musou + (dmg / D.enemyDmg) * 0.35); // gauge gain ignores difficulty scaling
     this.invuln = heavy ? 0.9 : 0.25;
     const yaw = Math.atan2(from.x - this.pos.x, from.z - this.pos.z);
     if (this.hp <= 0) {

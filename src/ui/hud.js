@@ -1,4 +1,5 @@
 import { PATH } from '../world/level.js';
+import { DIFFICULTY, DIFFICULTY_ORDER } from '../data/difficulty.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const html = (s) => { const t = document.createElement('template'); t.innerHTML = s.trim(); return t.content.firstElementChild; };
@@ -42,21 +43,31 @@ export class HUD {
   }
   hideLoading() { this.el.loading.style.opacity = 0; setTimeout(() => this.el.loading.remove(), 1100); }
 
-  showTitle(quality, onQuality) {
+  showTitle(quality, onQuality, difficulty, onDifficulty) {
     const t = html(`<div id="title">
       <div class="quality">GRAPHICS ${['low', 'medium', 'high', 'ultra'].map((q) => `<button data-q="${q}" class="${q === quality ? 'on' : ''}">${q.toUpperCase()}</button>`).join('')}</div>
       <div class="cn">長坂坡</div>
       <h1>SANGO WARRIORS</h1>
       <div class="chapter">Chapter I &nbsp;<b>·</b>&nbsp; The Lone Rider of Changban</div>
+      <div class="difficulty">${DIFFICULTY_ORDER.map((d) => `<button data-d="${d}">${DIFFICULTY[d].label}</button>`).join('')}<div class="desc"></div></div>
       <div class="press">PRESS ENTER OR CLICK TO BEGIN</div>
       <div class="controls">
         <span><b>WASD</b>Move</span><span><b>MOUSE</b>Camera</span><span><b>LMB / J</b>Attack</span><span><b>RMB / K</b>Charge attack</span>
         <span><b>SPACE</b>Jump</span><span><b>SHIFT</b>Dash</span><span><b>L / F</b>Musou</span><span><b>Q</b>Center camera</span>
       </div></div>`);
-    t.querySelectorAll('button').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); onQuality(b.dataset.q); }));
+    t.querySelectorAll('.quality button').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); onQuality(b.dataset.q); }));
+    t.querySelectorAll('.difficulty button').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this.selectDifficulty(b.dataset.d); }));
     this.root.append(t);
     this.title = t;
+    this.onDifficulty = onDifficulty;
+    this.selectDifficulty(difficulty, true);
     return t;
+  }
+  selectDifficulty(d, silent = false) {
+    if (!this.title || !DIFFICULTY[d]) return;
+    this.title.querySelectorAll('.difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.d === d));
+    this.title.querySelector('.difficulty .desc').textContent = DIFFICULTY[d].desc;
+    if (!silent) this.onDifficulty?.(d);
   }
   hideTitle() { this.title?.remove(); this.title = null; }
 
@@ -95,7 +106,7 @@ export class HUD {
     if (!officer) { this.el.boss.classList.add('hidden'); this.bossRef = null; return; }
     this.bossRef = officer;
     const d = officer.def;
-    this.el.bossName.innerHTML = `<span class="cn">${d.cn}</span>${d.name}<small>${d.title}</small>`;
+    this.el.bossName.innerHTML = `<span class="cn">${d.cn}</span>${d.name}<small>${d.title}</small>${d.rtk ? `<em class="rtk">統率 ${d.rtk.lea} · 武力 ${d.rtk.war} · 知力 ${d.rtk.int}</em>` : ''}`;
     this.el.boss.classList.remove('hidden');
   }
 
@@ -166,6 +177,14 @@ export class HUD {
     // river
     c.strokeStyle = 'rgba(60,120,150,0.85)'; c.lineWidth = 18 * scale;
     c.beginPath(); for (let x = -300; x <= 300; x += 10) { const [a, b] = P(x, 200 + Math.sin(x * 0.018) * 7); x === -300 ? c.moveTo(a, b) : c.lineTo(a, b); } c.stroke();
+    // palisade gates: red while shut, a gap once open
+    for (const g of s.gates ?? []) {
+      const seg = (a0, a1) => { const [x0, y0] = P(g.x + g.lx * a0, g.z + g.lz * a0), [x1, y1] = P(g.x + g.lx * a1, g.z + g.lz * a1); c.moveTo(x0, y0); c.lineTo(x1, y1); };
+      c.lineCap = 'butt'; c.lineWidth = 2.2 * scale; c.strokeStyle = g.open ? 'rgba(150,110,70,0.9)' : '#e0402c';
+      c.beginPath();
+      if (g.open) { seg(-60, -3.5); seg(3.5, 60); } else seg(-60, 60);
+      c.stroke();
+    }
     // enemies
     c.fillStyle = '#d23a2a';
     for (const g of s.grunts) { if (!g.active || !g.alive) continue; const [a, b] = P(g.x, g.z); if (a * a + b * b < R * R * 1.2) c.fillRect(a - 3, b - 3, 6, 6); }
@@ -197,7 +216,7 @@ export class HUD {
     c.save(); c.translate(R, R); c.rotate(rot); c.fillText('N', 0, -R + 26); c.restore();
   }
 
-  results(win, stats, onRetry) {
+  results(win, stats, onRetry, difficulty = '') {
     const rank = win ? (stats.ko >= 600 && stats.time < 900 ? 'S' : stats.ko >= 350 ? 'A' : stats.ko >= 150 ? 'B' : 'C') : '';
     const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     const el = html(`<div id="results" class="${win ? 'win' : 'lose'}">
@@ -205,7 +224,8 @@ export class HUD {
       <h2>${win ? 'VICTORY' : 'DEFEAT'}</h2>
       <div>${win ? 'Zhao Yun carried the young lord through a hundred thousand men.' : 'Zhao Yun has fallen at Changban.'}</div>
       <table><tr><td>K.O. count</td><td>${stats.ko}</td></tr><tr><td>Officers defeated</td><td>${stats.officers}</td></tr>
-      <tr><td>Max combo</td><td>${stats.maxCombo}</td></tr><tr><td>Time</td><td>${fmt(stats.time)}</td></tr></table>
+      <tr><td>Max combo</td><td>${stats.maxCombo}</td></tr><tr><td>Time</td><td>${fmt(stats.time)}</td></tr>
+      ${difficulty ? `<tr><td>Difficulty</td><td>${difficulty}</td></tr>` : ''}</table>
       ${win ? `<div class="rank">RANK ${rank}</div>` : ''}
       <button class="btn">${win ? 'PLAY AGAIN' : 'RETRY FROM CHECKPOINT'}</button></div>`);
     el.querySelector('button').addEventListener('click', () => { el.remove(); onRetry(); });

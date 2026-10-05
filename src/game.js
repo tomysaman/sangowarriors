@@ -4,7 +4,9 @@ import { installAtmosphericFog, buildSky } from './world/sky.js';
 import { makeTerrainTextures } from './world/textures.js';
 import { buildTerrain, buildFarMountains } from './world/terrain.js';
 import { buildGrass } from './world/grass.js';
-import { buildProps } from './world/props.js';
+import { buildProps, windCloth } from './world/props.js';
+import { buildGates, GATES, gateById, setGateOpen, updateGates, nextClosedGate } from './world/gates.js';
+import { makeBannerTexture } from './world/textures.js';
 import { START, VILLAGE, WELL, PASS, BRIDGE, groundAt, pathInfo, pointAt, CORRIDOR, insideHouse, riverZ, PATH_LENGTH, steerAround } from './world/level.js';
 import { Input } from './core/input.js';
 import { Audio } from './core/audio.js';
@@ -18,6 +20,7 @@ import { HUD, sleep } from './ui/hud.js';
 import { renderPortraits } from './ui/portraits.js';
 import { ZHAO_YUN, OFFICERS, NPCS } from './data/characters.js';
 import { CHAPTER1 } from './story/chapter1.js';
+import { D, DIFFICULTY_ORDER, loadDifficulty, setDifficulty } from './data/difficulty.js';
 import { angleDiff } from './core/noise.js';
 
 const frame = () => new Promise((r) => requestAnimationFrame(r));
@@ -52,6 +55,8 @@ export class Game {
   // Debug helpers (used by automated checks): teleport to a phase checkpoint.
   debugJump(phase) {
     const map = { village: [VILLAGE.x - 5, VILLAGE.z - 50], well: [WELL.x - 4, WELL.z - 8], pass: [PASS.x + 6, PASS.z - 36], bridge: [BRIDGE.x, BRIDGE.z - 40] };
+    const gateCp = { village: 'village', findMi: 'findMi', well: 'findMi', pass: 'zhanghe', bridge: 'toBridge' }[phase];
+    if (gateCp) this.setGatesFor(gateCp);
     if (phase === 'findMi') { this.phase = 'village'; this.officers.xiahouen.spawn(VILLAGE.x, VILLAGE.z, 0); this.officers.xiahouen.hit({ dmg: 99999, react: 'knockback' }, this.hero.pos); return; }
     if (phase === 'toBridge') { this.checkpoint = 'toBridge'; this.retry(false); return; }
     if (phase === 'escape') { this.checkpoint = 'escape'; this.retry(false); return; }
@@ -64,6 +69,7 @@ export class Game {
     try { await Promise.race([document.fonts.load('170px "Ma Shan Zheng"'), sleep(2500)]); } catch { /* fallback font */ }
     installAtmosphericFog();
     this.qualityName = pickQuality();
+    loadDifficulty();
     this.R = new Renderer(this.canvas, this.qualityName);
     const { scene, camera, renderer } = this.R;
     this.scene = scene; this.camera = camera;
@@ -79,6 +85,8 @@ export class Game {
     this.grass = buildGrass(scene, this.R.q.grass);
     await step(0.6, 'Setting the village ablaze');
     this.props = buildProps(scene);
+    buildGates(scene);
+    this.captainFlag = this.buildCaptainFlag();
     this.fx = new Effects(scene, this.props.fires, this.props.smokes);
     this.fx.weaponGlint = (g) => this.fx.glow.emit(g.x, g.y + 1.6 * g.scale, g.z, 0, 0, 0, { r: 3, g: 0.8, b: 0.4, life: 0.25, size: 0.5, grow: 0.5 });
     await step(0.7, 'Forging the dragon spear');
@@ -104,6 +112,7 @@ export class Game {
       xiahouen: new Officer(scene, OFFICERS.xiahouen, octx),
       zhanghe: new Officer(scene, OFFICERS.zhanghe, octx),
     };
+    this.crowd.commanders = Object.values(this.officers);
     this.ladyMi = new NPC(scene, NPCS.ladymi, NPC_POSES.ladyMiKneel);
     this.ladyMi.rig.extras.bundle.visible = true;
     this.ladyMi.place(WELL.x - 1.2, WELL.z + 1.6, MI_YAW);
@@ -149,13 +158,21 @@ export class Game {
   }
 
   showTitle() {
-    this.hud.showTitle(this.qualityName, (q) => { try { localStorage.setItem('sw-quality', q); } catch { /* ignore */ } location.reload(); });
+    this.hud.showTitle(this.qualityName, (q) => { try { localStorage.setItem('sw-quality', q); } catch { /* ignore */ } location.reload(); },
+      D.name, (d) => { setDifficulty(d); this.audio.init(); this.audio.play('step'); });
     const start = () => {
       if (this.state !== 'title') return;
       window.removeEventListener('keydown', onKey); this.canvas.removeEventListener('click', start); this.hud.title?.removeEventListener('click', start);
       this.startChapter();
     };
-    const onKey = (e) => { if (e.code === 'Enter' || e.code === 'Space') start(); };
+    const onKey = (e) => {
+      if (e.code === 'Enter' || e.code === 'Space') start();
+      const step = (e.code === 'ArrowLeft' || e.code === 'KeyA') ? -1 : (e.code === 'ArrowRight' || e.code === 'KeyD') ? 1 : 0;
+      if (step) {
+        const i = Math.max(0, Math.min(DIFFICULTY_ORDER.length - 1, DIFFICULTY_ORDER.indexOf(D.name) + step));
+        this.hud.selectDifficulty(DIFFICULTY_ORDER[i]);
+      }
+    };
     window.addEventListener('keydown', onKey);
     this.hud.title.addEventListener('click', start);
   }
@@ -166,6 +183,7 @@ export class Game {
     this.audio.startMusic();
     this.audio.play('gong');
     this.hud.hideTitle();
+    for (const o of Object.values(this.officers)) o.hp = o.maxHp = o.def.hp * D.officerHp;
     this.input.pressed.clear();
     if (!this.debugSkip) await this.hud.cards(this.chapter.intro, this.input);
     this.setCheckpoint('start');
@@ -185,6 +203,7 @@ export class Game {
     const B = this.chapter.beats;
     this.phase = name;
     if (name === 'start') {
+      this.setGatesFor('start');
       this.hero.place(START.x, START.z, 0); this.cam.snapBehind(0);
       this.ladyMi.rig.root.visible = true; this.wellRubble.visible = false;
       this.hero.rig.extras.bundle.visible = false; this.hero.hasBaby = false;
@@ -260,10 +279,7 @@ export class Game {
     if (this.phase === 'start' && d(VILLAGE) < 40) this.runPhase('village');
     else if (this.phase === 'findMi' && d(WELL) < 6) this.runPhase('well');
     else if (this.phase === 'escape' && (d(PASS) < 30 || pathInfo(h.x, h.z).s > this.passS - 22)) this.runPhase('zhanghe');
-    else if ((this.phase === 'toBridge' || this.phase === 'zhanghe') && h.z > BRIDGE.z - BRIDGE.len / 2 - 12) {
-      if (this.phase === 'zhanghe') { const o = this.officers.zhanghe; o.active = false; o.rig.root.visible = false; this.hud.boss(null); }
-      this.runPhase('bridge');
-    }
+    else if (this.phase === 'toBridge' && h.z > BRIDGE.z - BRIDGE.len / 2 - 12) this.runPhase('bridge');
   }
 
   async runPhase(name) {
@@ -279,6 +295,7 @@ export class Game {
     this.hud.toast(`${o.def.name} defeated!`, o.def.cn, 3);
     this.dropBun(o.pos.x, o.pos.z);
     const run = this.runId;
+    if (o === this.officers.zhanghe) this.openGate(gateById('rear'), false);
     const next = o === this.officers.xiahouen ? ['village', 'findMi'] : o === this.officers.zhanghe ? ['zhanghe', 'toBridge'] : null;
     if (next) setTimeout(() => { if (this.runId === run && this.phase === next[0] && this.hero.alive && this.state === 'play') this.runPhase(next[1]); }, 1600);
   }
@@ -347,7 +364,7 @@ export class Game {
     this.cam.clearCinematic();
     this.paused = false;
     this.lockControl(false);
-    this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + this.hero.maxHp * 0.5);
+    this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + this.hero.maxHp * 0.5 * D.heal);
     this.phase = 'escape';
     await this.beginPhase('escape');
   }
@@ -390,7 +407,7 @@ export class Game {
     this.input.wantLock = false;
     this.hud.showHUD(false);
     this.hud.boss(null);
-    this.hud.results(win, this.stats, () => this.retry(win));
+    this.hud.results(win, this.stats, () => this.retry(win), D.label);
   }
 
   retry(fromStart) {
@@ -406,6 +423,8 @@ export class Game {
     this.ladyMi.rig.extras.bundle.visible = true;
     this.lockControl(false); this.paused = false; this.cam.clearCinematic();
     if (fromStart) { this.stats = { ko: 0, officers: 0, maxCombo: 0, time: 0 }; this.checkpoint = 'start'; }
+    this.hud.boss(null);
+    this.setGatesFor(this.checkpoint);
     this.state = 'play';
     this.input.wantLock = true;
     this.hud.showHUD(true);
@@ -528,8 +547,116 @@ export class Game {
     if (run === this.runId && this.state === 'play') this.finish(false);
   }
 
+  // ---------------------------------------------------------------- palisade gates
+  // Gate states implied by each checkpoint. A gate is open once the story has passed it.
+  setGatesFor(cp) {
+    const order = ['start', 'village', 'findMi', 'escape', 'zhanghe', 'toBridge'];
+    const openFrom = { camp: 1, pass: 4, rear: 5 };
+    const i = Math.max(0, order.indexOf(cp));
+    for (const g of GATES) {
+      setGateOpen(g, i >= openFrom[g.id], true);
+      g.captain = null;
+      if (g.flag) g.flag.visible = false;
+    }
+    this.gateMarker = null; this.gateObjective = null;
+    if (this.hud.bossRef?.gateCaptain) this.hud.boss(null);
+  }
+
+  buildCaptainFlag() {
+    const mat = windCloth(new THREE.MeshStandardMaterial({ map: makeBannerTexture('令', '#8a1c14', '#f3e3bc', '#3a0806'), side: THREE.DoubleSide, roughness: 0.85 }), 0.25);
+    const wood = new THREE.MeshStandardMaterial({ color: 0x3a2416, roughness: 0.7 });
+    return () => {
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 2.6, 6), wood);
+      pole.position.y = 2.0; pole.castShadow = true; g.add(pole);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 1.3, 8, 4).translate(0.375, 0, 0), mat);
+      flag.position.set(0.03, 2.65, 0); flag.rotation.y = Math.PI / 2; flag.castShadow = true; g.add(flag);
+      g.visible = false;
+      this.scene.add(g);
+      return g;
+    };
+  }
+
+  // Keep a Gate Captain and garrison in front of each closed gate the current phase must pass.
+  updateGateGarrisons() {
+    const h = this.hero.pos;
+    const hs = pathInfo(h.x, h.z).s;
+    let focus = null;
+    for (const gate of GATES) {
+      if (gate.open || gate.opener !== 'captain' || gate.phase !== this.phase) continue;
+      if (gate.captain && (!gate.captain.active || gate.captain.gateCaptain !== gate)) gate.captain = null;
+      if (!gate.captain && gate.s - hs < 95) this.spawnGarrison(gate);
+      if (gate.captain && gate.s - hs < 140) focus = gate;
+    }
+    this.gateMarker = focus?.captain ?? null;
+    if (focus && this.gateObjective !== focus.id && !this.busyScene) {
+      this.gateObjective = focus.id;
+      this.hud.objective('A Wei palisade blocks the road — defeat the Gate Captain (令) to open the gate');
+    }
+    for (const gate of GATES) {
+      const c = gate.captain;
+      if (!gate.flag) continue;
+      gate.flag.visible = !!(c && c.active && c.alive);
+      if (gate.flag.visible) { gate.flag.position.set(c.x - Math.sin(c.yaw) * 0.3, c.y, c.z - Math.cos(c.yaw) * 0.3); gate.flag.rotation.y = c.yaw; }
+    }
+    // the captain's health bar shows while the hero is near him
+    const c = focus?.captain;
+    if (c && !this.hud.bossRef && Math.hypot(c.x - h.x, c.z - h.z) < 26) this.hud.boss(c);
+    else if (this.hud.bossRef?.gateCaptain && (!c || this.hud.bossRef !== c || Math.hypot(c.x - h.x, c.z - h.z) > 40)) this.hud.boss(null);
+  }
+
+  spawnGarrison(gate) {
+    const px = gate.x - gate.tx * 8, pz = gate.z - gate.tz * 8;
+    const opts = {
+      captain: true, gateCaptain: gate, keep: true, hp: 420 * D.gruntHp, scale: 1.3, aggro: 1.4, type: 'spear',
+      post: { x: px, z: pz, r: 24 }, yaw: Math.atan2(-gate.tx, -gate.tz),
+      def: { cn: '門將', name: 'Gate Captain', title: 'Wei palisade' },
+    };
+    let c = this.crowd.spawn(px, pz, opts);
+    if (!c) {
+      // crowd is full: free the farthest ordinary soldier to make room
+      let far = null, fd = -1;
+      for (const g of this.crowd.g) {
+        if (!g.active || g.keep) continue;
+        const d = Math.hypot(g.x - this.hero.pos.x, g.z - this.hero.pos.z);
+        if (d > fd) { fd = d; far = g; }
+      }
+      if (far) this.crowd.release(far);
+      c = this.crowd.spawn(px, pz, opts);
+    }
+    if (!c) return;
+    gate.captain = c;
+    gate.flag ??= this.captainFlag();
+    for (let i = 0; i < 12; i++) {
+      const lat = (Math.random() * 2 - 1) * 14, back = 4 + Math.random() * 12;
+      const x = gate.x + gate.lx * lat - gate.tx * back, z = gate.z + gate.lz * lat - gate.tz * back;
+      if (insideHouse(x, z, 1)) continue;
+      this.crowd.spawn(x, z, { captain: i < 2, aggro: 1.2, yaw: opts.yaw });
+    }
+  }
+
+  openGate(gate, announce) {
+    if (!gate || gate.open) return;
+    setGateOpen(gate, true);
+    if (this.hud.bossRef?.gateCaptain === gate) this.hud.boss(null);
+    if (gate.flag) gate.flag.visible = false;
+    gate.captain = null;
+    this.gateMarker = null; this.gateObjective = null;
+    this.audio.play('boom');
+    this.cam.shake(0.35);
+    this.fx.dust(this.tmpV(gate.x, groundAt(gate.x, gate.z) + 0.3, gate.z), 26, 1.2, 3);
+    if (announce) {
+      this.audio.play('gong');
+      this.hud.toast('The gate is open!', 'Gate Captain defeated', 3);
+      const B = this.chapter.beats;
+      const obj = this.phase === 'start' ? B.start.objective : this.phase === 'escape' ? B.well.objective : null;
+      if (obj) setTimeout(() => { if (this.state === 'play') this.hud.objective(obj); }, 1500);
+    }
+  }
+
   onKO(g) {
     this.stats.ko++;
+    if (g.gateCaptain) this.openGate(g.gateCaptain, true);
     if (Math.random() < (g.captain ? 0.25 : 0.03)) this.dropBun(g.x, g.z);
   }
 
@@ -563,7 +690,7 @@ export class Game {
       it.mesh.rotation.y += dt * 1.5;
       it.mesh.children[3].scale.setScalar(1 + Math.sin(it.t * 4) * 0.12);
       if (Math.hypot(this.hero.pos.x - it.x, this.hero.pos.z - it.z) < 1.3 && this.hero.alive) {
-        this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + this.hero.maxHp * 0.35);
+        this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + this.hero.maxHp * 0.35 * D.heal);
         this.fx.pickup(it.mesh.position); this.audio.play('pickup');
         this.hud.toast('Meat Bun', 'Health restored', 1.4);
         this.scene.remove(it.mesh); this.items.splice(i, 1);
@@ -581,7 +708,9 @@ export class Game {
     const hs = pathInfo(this.hero.pos.x, this.hero.pos.z).s;
     for (let tries = 0; tries < 6; tries++) {
       const ahead = Math.random() < 0.75;
-      const s = Math.min(PATH_LENGTH - 60, Math.max(5, hs + (ahead ? 26 + Math.random() * 30 : -(20 + Math.random() * 15))));
+      let s = Math.min(PATH_LENGTH - 60, Math.max(5, hs + (ahead ? 26 + Math.random() * 30 : -(20 + Math.random() * 15))));
+      const wall = nextClosedGate(hs);
+      if (wall) s = Math.min(s, wall.s - 6);
       const p = pointAt(s);
       const lat = (Math.random() * 2 - 1) * (CORRIDOR - 8);
       const x = p.x + Math.cos(p.dir) * lat, z = p.z - Math.sin(p.dir) * lat;
@@ -623,6 +752,7 @@ export class Game {
         this.crowd.update(dt, h, this.props.colliders, this.time);
         for (const o of Object.values(this.officers)) o.update(dt, h, this.props.colliders);
         this.updateSpawns(rawDt);
+        this.updateGateGarrisons();
         this.updateItems(rawDt);
         this.checkTriggers();
         if (!h.alive) this.onDefeat();
@@ -631,6 +761,7 @@ export class Game {
         for (const o of Object.values(this.officers)) if (o.active) { o.anim.update(dt); }
       }
       h.animate(dt);
+      updateGates(rawDt);
       this.comboT -= rawDt;
       if (this.comboT <= 0) this.combo = 0;
     } else {
@@ -677,7 +808,7 @@ export class Game {
 
     if (playing) this.hud.update(rawDt, {
       hero: h, ko: this.stats.ko, time: this.stats.time, combo: this.combo, camYaw: this.cam.yaw,
-      grunts: this.crowd.g, officers: Object.values(this.officers), marker: this.marker,
+      grunts: this.crowd.g, officers: Object.values(this.officers), marker: this.gateMarker ?? this.marker, gates: GATES,
       allies: this.phase === 'toBridge' || this.phase === 'bridge' ? [this.zhangFei.pos] : [],
     });
     this.fpsAcc = (this.fpsAcc ?? 0) + rawDt; this.fpsN = (this.fpsN ?? 0) + 1;
