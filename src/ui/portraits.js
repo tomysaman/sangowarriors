@@ -4,6 +4,16 @@ import { buildWarrior } from '../actors/rig.js';
 import { Animator } from '../actors/animator.js';
 import { makePose } from '../actors/pose.js';
 
+// Painted portraits from KOEI's Romance of the Three Kingdoms XI, named by character id
+// (src/assets/portraits/<id>.png). Characters without one get a rendered portrait.
+const ART = Object.fromEntries(Object.entries(import.meta.glob('../assets/portraits/*.png', { eager: true, import: 'default' }))
+  .map(([path, url]) => [path.match(/([^/]+)\.png$/)[1], url]));
+
+export function loadPortraits(defs) {
+  const missing = defs.filter((d) => !ART[d.id]);
+  return { ...(missing.length ? renderPortraits(missing) : {}), ...ART };
+}
+
 // Render head-and-shoulders portraits of characters into data URLs (one-off offscreen renderer).
 export function renderPortraits(defs) {
   const size = 256;

@@ -17,7 +17,7 @@ import { Officer, NPC, NPC_POSES } from './actors/officer.js';
 import { sweepHits } from './actors/combat.js';
 import { Effects } from './fx/effects.js';
 import { HUD, sleep } from './ui/hud.js';
-import { renderPortraits } from './ui/portraits.js';
+import { loadPortraits } from './ui/portraits.js';
 import { ZHAO_YUN, OFFICERS, NPCS } from './data/characters.js';
 import { CHAPTER1 } from './story/chapter1.js';
 import { D, DIFFICULTY_ORDER, loadDifficulty, setDifficulty } from './data/difficulty.js';
@@ -122,7 +122,7 @@ export class Game {
     this.cam = new CameraRig(camera);
     await step(0.85, 'Painting portraits');
     try {
-      this.hud.portraits = renderPortraits([ZHAO_YUN, OFFICERS.xiahouen, OFFICERS.zhanghe, NPCS.ladymi, NPCS.zhangfei]);
+      this.hud.portraits = loadPortraits([ZHAO_YUN, OFFICERS.xiahouen, OFFICERS.zhanghe, NPCS.ladymi, NPCS.zhangfei]);
     } catch (e) { console.warn('portraits failed', e); }
     this.hud.setPlayer(ZHAO_YUN);
     await step(0.95, 'Compiling shaders');

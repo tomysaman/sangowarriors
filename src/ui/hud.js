@@ -12,7 +12,7 @@ export class HUD {
     root.append(html(`<div id="hud" class="hidden">
       <div id="objective" class="panel"><div class="label">OBJECTIVE</div><div class="text"></div></div>
       <div id="topright"><canvas id="minimap" width="380" height="380"></canvas><div id="ko" class="panel">KO<b>0</b></div><div id="timer">00:00</div></div>
-      <div id="boss" class="hidden"><div class="nm"></div><div class="bar hp"><i class="lag"></i><i class="fill"></i></div></div>
+      <div id="boss" class="hidden"><img class="portrait" alt=""><div class="info"><div class="nm"></div><div class="bar hp"><i class="lag"></i><i class="fill"></i></div></div></div>
       <div id="combo"><div class="n">0</div><div class="l">HITS</div></div>
       <div id="player"><div class="portrait"><img alt=""></div><div class="bars"><div class="name"></div>
         <div class="bar hp"><i class="lag"></i><i class="fill"></i></div><div class="bar musou"><i class="fill"></i></div></div></div>
@@ -24,7 +24,7 @@ export class HUD {
     root.append(html(`<div id="dialogue" class="panel"><img alt=""><div><div class="who"></div><div class="line"></div></div><div class="next">ENTER ▸</div></div>`));
     this.el = {
       loading: $('#loading'), hud: $('#hud'), obj: $('#objective .text'), ko: $('#ko b'), timer: $('#timer'),
-      boss: $('#boss'), bossName: $('#boss .nm'), bossFill: $('#boss .fill'), bossLag: $('#boss .lag'),
+      boss: $('#boss'), bossImg: $('#boss .portrait'), bossName: $('#boss .nm'), bossFill: $('#boss .fill'), bossLag: $('#boss .lag'),
       combo: $('#combo'), comboN: $('#combo .n'),
       pImg: $('#player img'), pName: $('#player .name'), hpBar: $('#player .bar.hp'), hpFill: $('#player .bar.hp .fill'), hpLag: $('#player .bar.hp .lag'),
       musouBar: $('#player .bar.musou'), musouFill: $('#player .bar.musou .fill'), buff: $('#buff'),
@@ -107,6 +107,9 @@ export class HUD {
     this.bossRef = officer;
     const d = officer.def;
     this.el.bossName.innerHTML = `<span class="cn">${d.cn}</span>${d.name}<small>${d.title}</small>${d.rtk ? `<em class="rtk">統率 ${d.rtk.lea} · 武力 ${d.rtk.war} · 知力 ${d.rtk.int}</em>` : ''}`;
+    const img = this.portraits[d.id];
+    this.el.bossImg.style.display = img ? '' : 'none';
+    if (img) this.el.bossImg.src = img;
     this.el.boss.classList.remove('hidden');
   }
 

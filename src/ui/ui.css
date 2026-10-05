@@ -80,7 +80,9 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #combo .n.pop { animation: pop .18s; }
 @keyframes pop { 0% { transform: scale(1.35) } 100% { transform: scale(1) } }
 
-#boss { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); width: min(520px, 50vw); text-align: center; }
+#boss { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); width: min(560px, 52vw); display: flex; align-items: center; gap: 14px; }
+#boss .portrait { width: 68px; height: 68px; flex: none; border: 2px solid #b0281c; border-radius: 50%; object-fit: cover; background: #222; box-shadow: 0 0 16px rgba(0,0,0,.8); }
+#boss .info { flex: 1; min-width: 0; text-align: center; }
 #boss .nm { font-size: 20px; letter-spacing: .12em; text-shadow: 0 2px 2px #000; }
 #boss .nm .cn { font-family: var(--cn); color: #ff9a8a; margin-right: 8px; }
 #boss .nm small { display: block; font-size: 12px; letter-spacing: .3em; color: #b8a888; text-transform: uppercase; }

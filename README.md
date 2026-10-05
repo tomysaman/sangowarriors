@@ -2,7 +2,7 @@
 
 A Dynasty Warriors-style musou action game built with Three.js (r186) and Vite. You play Zhao Yun in a single chapter based on the Battle of Changban (*Romance of the Three Kingdoms*, ch. 41).
 
-All art, textures, animation and audio are generated procedurally at runtime. There are no external asset files.
+All 3D art, textures, animation and audio are generated procedurally at runtime. The only asset files are the character portraits in `src/assets/portraits/`, taken from KOEI's *Romance of the Three Kingdoms XI* and named by character id. A character without a portrait file gets a rendered portrait of the 3D model instead.
 
 ## Run
 
